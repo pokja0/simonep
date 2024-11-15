@@ -2,6 +2,7 @@ library(gt)
 library(dplyr)
 library(tidyr)
 library(data.table)
+library(fst)
 
 data_catin_melapor <- gsheet::gsheet2tbl("https://docs.google.com/spreadsheets/d/1ytoFze2zjF5l_plWwDRe_ZeAELrqtEVEDqjrt408vHc/edit?gid=1849424246#gid=1849424246")
 write.fst(data_catin_melapor, "data/capaian_catin.fst")

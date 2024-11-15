@@ -6,7 +6,7 @@ library(bs4Dash)
 library(fst)
 library(data.table)
 library(bslib)
-#library(bsicons)
+library(plotly)
 library(gt)
 
 data_wilayah <- read_fst("data/data_daftar_desa.fst")
@@ -84,6 +84,30 @@ ui <- dashboardPage(
                 column(
                   3,
                   gt_output("capaian_bumil")
+                )
+              )
+            ),
+            bs4Card(
+              width = 12, title = "Grafik Efektifitas Pendampingan Sasaran Di Wilayah", closable = F, collapsible = TRUE,
+              fluidRow(
+                column(
+                  6,
+                  plotlyOutput("efektif_catin"),
+                ),
+                column(
+                  6,
+                  plotlyOutput("efektif_pascasalin")
+                ),
+              ),
+              br(),
+              fluidRow(
+                column(
+                  6,
+                  plotlyOutput("efektif_baduta"),
+                ),
+                column(
+                  6,
+                  plotlyOutput("efektif_bumil")
                 )
               )
             )
@@ -460,22 +484,22 @@ server <- function(input, output, session) {
     
     # Sintaks berantai
     gt_bumil <- data_bumil_melapor[Kab %in% value_filter_kab() & 
-                                               Kec %in% value_filter_kec() & 
-                                               `Desa/Kel` %in% value_filter_desa_kel(), 
-                                             .(`Estimasi Bumil` = sum(target_tpk_bumil, na.rm = TRUE), 
-                                               `Pendampingan` = sum(total_pendampingan_bumil, na.rm = TRUE), 
-                                               `Bumil Terdampingi` = sum(total_bumil, na.rm = TRUE),
-                                               `Rasio Pendampingan` = round(sum(total_pendampingan_bumil, na.rm = TRUE) / sum(total_bumil, na.rm = TRUE), 2),
-                                               Capaian = round(sum(total_bumil, na.rm = TRUE) / sum(target_tpk_bumil, na.rm = TRUE) * 100, 2)),
-                                             by = Prov]
+                                     Kec %in% value_filter_kec() & 
+                                     `Desa/Kel` %in% value_filter_desa_kel(), 
+                                   .(`Estimasi Bumil` = sum(target_tpk_bumil, na.rm = TRUE), 
+                                     `Pendampingan` = sum(total_pendampingan_bumil, na.rm = TRUE), 
+                                     `Bumil Terdampingi` = sum(total_bumil, na.rm = TRUE),
+                                     `Rasio Pendampingan` = round(sum(total_pendampingan_bumil, na.rm = TRUE) / sum(total_bumil, na.rm = TRUE), 2),
+                                     Capaian = round(sum(total_bumil, na.rm = TRUE) / sum(target_tpk_bumil, na.rm = TRUE) * 100, 2)),
+                                   by = Prov]
     
     gt_bumil <- melt(gt_bumil, id.vars = c("Prov"), 
-                          measure.vars = c("Estimasi Bumil", "Pendampingan", "Bumil Terdampingi",
-                                           "Rasio Pendampingan", "Capaian"),
-                          variable.name = "Indikator", 
-                          value.name = "Total")[
-                            , .(Indikator, Total)
-                          ]
+                     measure.vars = c("Estimasi Bumil", "Pendampingan", "Bumil Terdampingi",
+                                      "Rasio Pendampingan", "Capaian"),
+                     variable.name = "Indikator", 
+                     value.name = "Total")[
+                       , .(Indikator, Total)
+                     ]
     
     gt(gt_bumil) %>%
       tab_header(
@@ -507,6 +531,110 @@ server <- function(input, output, session) {
         ),
         locations = cells_body(columns = c(Indikator)) # Terapkan pada semua kolom
       )
+  })
+  
+  output$efektif_catin <- renderPlotly({
+    efektifitas_catin_dplyr <- as.data.table(read_fst("data/efektifitas_catin.fst"))
+    grafik_catin <- efektifitas_catin_dplyr[kota %in% value_filter_kab() & 
+                                                kecamatan %in% value_filter_kec() & 
+                                                kelurahan %in% value_filter_desa_kel(),
+                                              .(total = sum(total)),
+                                              by = c("prov", "keterangan_waktu", "keterangan_resiko")]
+    
+    grafik <- plot_ly(grafik_catin, 
+                      x = ~keterangan_waktu, 
+                      y = ~total, 
+                      color = ~keterangan_resiko,
+                      colors = c("#950606", "#008000"),
+                      type = 'bar', 
+                      textposition = 'auto',
+                      text = ~paste("Total: ", total),
+                      hoverinfo = "text") %>%
+      layout(title = "Efektifitas Pendampingan Calon Pengantian",
+             xaxis = list(title = "Kondisi Resiko"),
+             yaxis = list(title = "Total"))
+    
+    # Menampilkan grafik
+    grafik
+    
+  })
+  
+  output$efektif_pascasalin <- renderPlotly({
+    efektifitas_pascasalin_dplyr <- as.data.table(read_fst("data/efektifitas_pascasalin.fst"))
+    grafik_pascasalin <- efektifitas_pascasalin_dplyr[kota %in% value_filter_kab() & 
+                                                kecamatan %in% value_filter_kec() & 
+                                                kelurahan %in% value_filter_desa_kel(),
+                                              .(total = sum(total)),
+                                              by = c("prov", "keterangan_waktu", "keterangan_resiko")]
+    
+    grafik <- plot_ly(grafik_pascasalin, 
+                      x = ~keterangan_waktu, 
+                      y = ~total, 
+                      color = ~keterangan_resiko,
+                      colors = c("#950606", "#008000"),
+                      type = 'bar', 
+                      textposition = 'auto',
+                      text = ~paste("Total: ", total),
+                      hoverinfo = "text") %>%
+      layout(title = "Efektifitas Pendampingan Ibu Pascasalin",
+             xaxis = list(title = "Kondisi Resiko"),
+             yaxis = list(title = "Total"))
+    
+    # Menampilkan grafik
+    grafik
+    
+  })
+  
+  output$efektif_baduta <- renderPlotly({
+    efektifitas_baduta_dplyr <- as.data.table(read_fst("data/efektifitas_baduta.fst"))
+    grafik_baduta <- efektifitas_baduta_dplyr[kota %in% value_filter_kab() & 
+                                                kecamatan %in% value_filter_kec() & 
+                                                kelurahan %in% value_filter_desa_kel(),
+                                              .(total = sum(total)),
+                                              by = c("prov", "keterangan_waktu", "keterangan_resiko")]
+    
+    grafik <- plot_ly(grafik_baduta, 
+                      x = ~keterangan_waktu, 
+                      y = ~total, 
+                      color = ~keterangan_resiko,
+                      colors = c("#950606", "#008000"),
+                      type = 'bar', 
+                      textposition = 'auto',
+                      text = ~paste("Total: ", total),
+                      hoverinfo = "text") %>%
+      layout(title = "Efektifitas Pendampingan Baduta",
+             xaxis = list(title = "Kondisi Resiko"),
+             yaxis = list(title = "Total"))
+    
+    # Menampilkan grafik
+    grafik
+    
+  })
+  
+  output$efektif_bumil <- renderPlotly({
+    efektifitas_bumil_dplyr <- as.data.table(read_fst("data/efektifitas_bumil.fst"))
+    grafik_bumil <- efektifitas_bumil_dplyr[kota %in% value_filter_kab() & 
+                                                kecamatan %in% value_filter_kec() & 
+                                                kelurahan %in% value_filter_desa_kel(),
+                                              .(total = sum(total)),
+                                              by = c("prov", "keterangan_waktu", "keterangan_resiko")]
+    
+    grafik <- plot_ly(grafik_bumil, 
+                      x = ~keterangan_waktu, 
+                      y = ~total, 
+                      color = ~keterangan_resiko,
+                      colors = c("#950606", "#008000"),
+                      type = 'bar', 
+                      textposition = 'auto',
+                      text = ~paste("Total: ", total),
+                      hoverinfo = "text") %>%
+      layout(title = "Efektifitas Pendampingan Ibu Hamil",
+             xaxis = list(title = "Kondisi Resiko"),
+             yaxis = list(title = "Total"))
+    
+    # Menampilkan grafik
+    grafik
+    
   })
   
   #akhir rekap wilayah
