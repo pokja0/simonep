@@ -67,7 +67,7 @@ ui <- dashboardPage(
                   )
                 )
               ),
-            bs4Card(width = 12, title = "Capaian Pendampingan Per Wilayah", closable = F, collapsible = TRUE,
+            bs4Card(width = 12, title = "Capaian Pendampingan Sasaran Wilayah", closable = F, collapsible = TRUE,
               fluidRow(
                 column(
                   3,
@@ -299,34 +299,34 @@ server <- function(input, output, session) {
                                      Kec %in% value_filter_kec() & 
                                      `Desa/Kel` %in% value_filter_desa_kel(), 
                                    .(`Estimasi Catin` = sum(target_tpk, na.rm = TRUE), 
-                                     `Total Pendampingan` = sum(total_pendampingan, na.rm = TRUE), 
-                                     `Total Orang` = sum(total_orang, na.rm = TRUE),
-                                     `Rasio Total` = round(sum(total_pendampingan) / sum(total_orang), 2),
+                                     `Pendampingan` = sum(total_pendampingan, na.rm = TRUE), 
+                                     `Catin Terdampingi` = sum(total_orang, na.rm = TRUE),
+                                     `Rasio Pendampingan` = round(sum(total_pendampingan) / sum(total_orang), 2),
                                      Capaian = round(sum(total_orang) / sum(target_tpk) * 100, 2)),
                                    by = Prov]
     
     gt_catin <- melt(gt_catin, id.vars = c("Prov"), 
-                     measure.vars = c("Estimasi Catin", "Total Pendampingan", "Total Orang", "Rasio Total", "Capaian"),
+                     measure.vars = c("Estimasi Catin", "Pendampingan", "Catin Terdampingi", "Rasio Pendampingan", "Capaian"),
                      variable.name = "Indikator", 
-                     value.name = "Nilai")[
-                       , .(Indikator, Nilai)
+                     value.name = "Total")[
+                       , .(Indikator, Total)
                      ]
     
     gt(gt_catin) %>%
       tab_header(
-        title = md("**Sasaran Catin**") # Ganti judul sesuai kebutuhan
+        title = md("**Calon Pengantin**") # Ganti judul sesuai kebutuhan
       ) %>%
       fmt_integer(
-        columns = c(Nilai), 
-        rows = Indikator %in% c("Estimasi Catin", "Total Pendampingan", "Total Orang"),
+        columns = c(Total), 
+        rows = Indikator %in% c("Estimasi Catin", "Pendampingan", "Catin Terdampingi"),
         use_seps = TRUE, 
         sep_mark = "."
       ) %>%
       fmt_number(
-        columns = c(Nilai),
+        columns = c(Total),
         use_seps = TRUE, 
         sep_mark = ".",
-        rows = Indikator %in% c("Rasio Total", "Capaian"),
+        rows = Indikator %in% c("Rasio Pendampingan", "Capaian"),
         decimals = 2, 
         dec_mark = ","
       ) %>%
@@ -344,7 +344,6 @@ server <- function(input, output, session) {
       )
   })
   
-  
   output$capaian_pascasalin <- render_gt({
     data_pascasalin_melapor <- data.table(read_fst("data/capaian_pascasalin.fst"))
     is.data.table(data_pascasalin_melapor)
@@ -353,35 +352,36 @@ server <- function(input, output, session) {
     gt_pascasalin <- data_pascasalin_melapor[Kab %in% value_filter_kab() & 
                                      Kec %in% value_filter_kec() & 
                                      `Desa/Kel` %in% value_filter_desa_kel(), 
-                                   .(`Estimasi pascasalin` = sum(target_tpk, na.rm = TRUE), 
-                                     `Total Pendampingan` = sum(total_pendampingan, na.rm = TRUE), 
-                                     `Total Orang` = sum(total_orang, na.rm = TRUE),
-                                     `Rasio Total` = round(sum(total_pendampingan) / sum(total_orang), 2),
+                                   .(`Estimasi Pascasalin` = sum(target_tpk, na.rm = TRUE), 
+                                     `Pendampingan` = sum(total_pendampingan, na.rm = TRUE), 
+                                     `Pascasalin Terdampingi` = sum(total_orang, na.rm = TRUE),
+                                     `Rasio Pendampingan` = round(sum(total_pendampingan) / sum(total_orang), 2),
                                      Capaian = round(sum(total_orang) / sum(target_tpk) * 100, 2)),
                                    by = Prov]
     
     gt_pascasalin <- melt(gt_pascasalin, id.vars = c("Prov"), 
-                     measure.vars = c("Estimasi pascasalin", "Total Pendampingan", "Total Orang", "Rasio Total", "Capaian"),
+                     measure.vars = c("Estimasi Pascasalin", "Pendampingan", "Pascasalin Terdampingi", 
+                                      "Rasio Pendampingan", "Capaian"),
                      variable.name = "Indikator", 
-                     value.name = "Nilai")[
-                       , .(Indikator, Nilai)
+                     value.name = "Total")[
+                       , .(Indikator, Total)
                      ]
     
     gt(gt_pascasalin) %>%
       tab_header(
-        title = md("**Sasaran Pascasalin**") # Ganti judul sesuai kebutuhan
+        title = md("**Ibu Pascasalin**") # Ganti judul sesuai kebutuhan
       ) %>%
       fmt_integer(
-        columns = c(Nilai), 
-        rows = Indikator %in% c("Estimasi pascasalin", "Total Pendampingan", "Total Orang"),
+        columns = c(Total), 
+        rows = Indikator %in% c("Estimasi pascasalin", "Pendampingan", "Pascasalin Terdampingi"),
         use_seps = TRUE, 
         sep_mark = "."
       ) %>%
       fmt_number(
-        columns = c(Nilai),
+        columns = c(Total),
         use_seps = TRUE, 
         sep_mark = ".",
-        rows = Indikator %in% c("Rasio Total", "Capaian"),
+        rows = Indikator %in% c("Rasio Pendampingan", "Capaian"),
         decimals = 2, 
         dec_mark = ","
       ) %>%
@@ -407,35 +407,36 @@ server <- function(input, output, session) {
     gt_baduta <- data_baduta_melapor[Kab %in% value_filter_kab() & 
                                                Kec %in% value_filter_kec() & 
                                                `Desa/Kel` %in% value_filter_desa_kel(), 
-                                             .(`Estimasi baduta` = sum(target_tpk, na.rm = TRUE), 
-                                               `Total Pendampingan` = sum(total_pendampingan, na.rm = TRUE), 
-                                               `Total Orang` = sum(total_baduta, na.rm = TRUE),
-                                               `Rasio Total` = round(sum(total_pendampingan) / sum(total_baduta), 2),
+                                             .(`Estimasi Baduta` = sum(target_tpk, na.rm = TRUE), 
+                                               `Pendampingan` = sum(total_pendampingan, na.rm = TRUE), 
+                                               `Baduta Terdampingi` = sum(total_baduta, na.rm = TRUE),
+                                               `Rasio Pendampingan` = round(sum(total_pendampingan) / sum(total_baduta), 2),
                                                Capaian = round(sum(total_baduta) / sum(target_tpk) * 100, 2)),
                                              by = Prov]
     
     gt_baduta <- melt(gt_baduta, id.vars = c("Prov"), 
-                          measure.vars = c("Estimasi baduta", "Total Pendampingan", "Total Orang", "Rasio Total", "Capaian"),
+                          measure.vars = c("Estimasi Baduta", "Pendampingan", "Baduta Terdampingi", 
+                                           "Rasio Pendampingan", "Capaian"),
                           variable.name = "Indikator", 
-                          value.name = "Nilai")[
-                            , .(Indikator, Nilai)
+                          value.name = "Total")[
+                            , .(Indikator, Total)
                           ]
     
     gt(gt_baduta) %>%
       tab_header(
-        title = md("**Sasaran Baduta**") # Ganti judul sesuai kebutuhan
+        title = md("**Baduta**") # Ganti judul sesuai kebutuhan
       ) %>%
       fmt_integer(
-        columns = c(Nilai), 
-        rows = Indikator %in% c("Estimasi baduta", "Total Pendampingan", "Total Orang"),
+        columns = c(Total), 
+        rows = Indikator %in% c("Estimasi Baduta", "Pendampingan", "Baduta Terdampingi"),
         use_seps = TRUE, 
         sep_mark = "."
       ) %>%
       fmt_number(
-        columns = c(Nilai),
+        columns = c(Total),
         use_seps = TRUE, 
         sep_mark = ".",
-        rows = Indikator %in% c("Rasio Total", "Capaian"),
+        rows = Indikator %in% c("Rasio Pendampingan", "Capaian"),
         decimals = 2, 
         dec_mark = ","
       ) %>%
@@ -461,35 +462,36 @@ server <- function(input, output, session) {
     gt_bumil <- data_bumil_melapor[Kab %in% value_filter_kab() & 
                                                Kec %in% value_filter_kec() & 
                                                `Desa/Kel` %in% value_filter_desa_kel(), 
-                                             .(`Estimasi bumil` = sum(target_tpk_bumil, na.rm = TRUE), 
-                                               `Total Pendampingan` = sum(total_pendampingan_bumil, na.rm = TRUE), 
-                                               `Total Orang` = sum(total_bumil, na.rm = TRUE),
-                                               `Rasio Total` = round(sum(total_pendampingan_bumil) / sum(total_bumil), 2),
-                                               Capaian = round(sum(total_bumil) / sum(target_tpk_bumil) * 100, 2)),
+                                             .(`Estimasi Bumil` = sum(target_tpk_bumil, na.rm = TRUE), 
+                                               `Pendampingan` = sum(total_pendampingan_bumil, na.rm = TRUE), 
+                                               `Bumil Terdampingi` = sum(total_bumil, na.rm = TRUE),
+                                               `Rasio Pendampingan` = round(sum(total_pendampingan_bumil, na.rm = TRUE) / sum(total_bumil, na.rm = TRUE), 2),
+                                               Capaian = round(sum(total_bumil, na.rm = TRUE) / sum(target_tpk_bumil, na.rm = TRUE) * 100, 2)),
                                              by = Prov]
     
     gt_bumil <- melt(gt_bumil, id.vars = c("Prov"), 
-                          measure.vars = c("Estimasi bumil", "Total Pendampingan", "Total Orang", "Rasio Total", "Capaian"),
+                          measure.vars = c("Estimasi Bumil", "Pendampingan", "Bumil Terdampingi",
+                                           "Rasio Pendampingan", "Capaian"),
                           variable.name = "Indikator", 
-                          value.name = "Nilai")[
-                            , .(Indikator, Nilai)
+                          value.name = "Total")[
+                            , .(Indikator, Total)
                           ]
     
     gt(gt_bumil) %>%
       tab_header(
-        title = md("**Sasaran bumil**") # Ganti judul sesuai kebutuhan
+        title = md("**Ibu Hamil**") # Ganti judul sesuai kebutuhan
       ) %>%
       fmt_integer(
-        columns = c(Nilai), 
-        rows = Indikator %in% c("Estimasi bumil", "Total Pendampingan", "Total Orang"),
+        columns = c(Total), 
+        rows = Indikator %in% c("Estimasi bumil", "Pendampingan", "Bumil Terdampingi"),
         use_seps = TRUE, 
         sep_mark = "."
       ) %>%
       fmt_number(
-        columns = c(Nilai),
+        columns = c(Total),
         use_seps = TRUE, 
         sep_mark = ".",
-        rows = Indikator %in% c("Rasio Total", "Capaian"),
+        rows = Indikator %in% c("Rasio Pendampingan", "Capaian"),
         decimals = 2, 
         dec_mark = ","
       ) %>%
