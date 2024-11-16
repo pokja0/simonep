@@ -9,6 +9,7 @@ library(bslib)
 library(plotly)
 library(gt)
 library(reactablefmtr)
+library(waiter)
 
 data_wilayah <- read_fst("data/data_daftar_desa.fst")
 data_wilayah <- data.table(data_wilayah)
@@ -17,6 +18,7 @@ data_pkb <- data.table(read_fst("data/data_pkb.fst"))
 
 # UI: Define the user interface
 ui <- dashboardPage(
+  preloader = list(html = tagList(spin_1(), "Loading ..."), color = "#343a40"),
   header = dashboardHeader(title = "SIMONEP"),  # Header with title
   sidebar = dashboardSidebar(   # Sidebar with navigation
     sidebarMenu(
