@@ -173,10 +173,31 @@ ui <- dashboardPage(
                 )
               ),
               fluidRow(
-                box(title = "Data Plot", status = "primary", solidHeader = TRUE, width = 6,
+                box(title = "Profil Wilayah", status = "primary", solidHeader = TRUE, width = 4,
                     gt_output("tabel_tpk")),
-                box(title = "Data Table", status = "warning", solidHeader = TRUE, width = 6,
-                    DT::dataTableOutput("data_table"))
+                box(title = "Capaian Pendampingan (%)", status = "warning", solidHeader = TRUE, width = 8, height = "250",
+                    plotlyOutput("radar_tpk", height = "100%"))
+              ),
+              fluidRow(
+                column(
+                  6,
+                  plotlyOutput("line_catin")
+                ),
+                column(
+                  6,
+                  plotlyOutput("line_pascasalin")
+                )
+              ),
+              br(),
+              fluidRow(
+                column(
+                  6,
+                  plotlyOutput("line_baduta")
+                ),
+                column(
+                  6,
+                  plotlyOutput("line_bumil")
+                )
               )
       ),
       tabItem(tabName = "settings",
@@ -800,7 +821,7 @@ server <- function(input, output, session) {
             })
             return totalPrice / totalUnits * 100
           }"),
-                         format = colFormat(locales = "id-ID", digits = 2)
+        format = colFormat(locales = "id-ID", digits = 2)
         ),
         keterangan = colDef(aggregate = "frequency", name = "Keterangan")
       )
@@ -850,14 +871,373 @@ server <- function(input, output, session) {
   #akhir input tpk
   
   data_tpk_cari <- eventReactive(input$cari_tpk, {
-    data_tpk = data_tpk[`No Register` == input$pilih_tpk]
+    data_pendampingan <- as.data.table(read_fst("data/pendampingan_bumil.fst"))
+    gt_wil_tpk <- data_pendampingan[, .SD[`No Register` == input$pilih_tpk]]
+    
+    gt_wil_tpk <- melt(gt_wil_tpk, id.vars = c("prov"), 
+                         measure.vars = c("prov", "Kab", "Kec", "Desa/Kel", "No Register"),
+                         variable.name = "Indikator", 
+                         value.name = "Nilai")[
+                           , .(Indikator, Nilai)
+                         ]
+    
+    gt_wil_tpk$Indikator <- toupper(gt_wil_tpk$Indikator)
+    gt_wil_tpk
+    
   })
   
   output$tabel_tpk <- render_gt({
-    data_tpk = data_tpk_cari()
-    gt(data_tpk)
+    gt_wil_tpk = data_tpk_cari()
+    
+    gt(gt_wil_tpk) %>%
+      tab_style(
+        style = list(
+          cell_text(align = "left")
+        ),
+        locations = cells_column_labels(columns = c(Indikator)) # Ganti 'kota' dengan nama kolom yang ingin Anda rata kiri
+      ) %>%
+      tab_style(
+        style = list(
+          cell_text(align = "left") # Mengatur teks agar rata kiri
+        ),
+        locations = cells_body(columns = c(Indikator)) # Terapkan pada semua kolom
+      ) %>%
+      cols_label(
+        Indikator = "",
+        Nilai = ""
+      ) 
   })
   
+  data_spider <- eventReactive(input$cari_tpk, {
+    pendampingan_baduta <- as.data.table(read_fst("data/capaian_baduta.fst"))
+    pendampingan_baduta <- pendampingan_baduta[, .SD[no_register_tpk == input$pilih_tpk]]
+    
+    pendampingan_bumil <- as.data.table(read_fst("data/capaian_bumil.fst"))
+    pendampingan_bumil <- pendampingan_bumil[, .SD[no_register_tpk == input$pilih_tpk]]
+    
+    pendampingan_pascasalin <- as.data.table(read_fst("data/capaian_pascasalin.fst"))
+    pendampingan_pascasalin <- pendampingan_pascasalin[, .SD[no_register_tpk == input$pilih_tpk]]
+    
+    pendampingan_catin <- as.data.table(read_fst("data/capaian_catin.fst"))
+    pendampingan_catin <- pendampingan_catin[, .SD[no_register_tpk == input$pilih_tpk]]
+    
+    data_spider_pendampingan <- data.table(
+      Sasaran = c("Catin", "Bumil", "Pascasalin", "Baduta"),
+      Capaian = c(pendampingan_catin$capaian, pendampingan_bumil$capaian_bumil,
+                  pendampingan_pascasalin$capaian,pendampingan_baduta$capaian_baduta)
+    )
+    
+    data_spider_pendampingan[, Capaian := ifelse(Capaian > 100 | is.infinite(Capaian), 100, Capaian)]
+  })
+  
+  output$radar_tpk <- renderPlotly({
+    data_spider_pendampingan =  data_spider()
+    plot_ly(type = 'scatterpolar', mode = 'lines+markers') %>%
+      add_trace(
+        r = data_spider_pendampingan$Capaian,
+        theta = data_spider_pendampingan$Sasaran,
+        name = 'Sasaran',
+        fill = 'toself',
+        text = paste0("Capaian ", data_spider_pendampingan$Sasaran, ": ", data_spider_pendampingan$Capaian, "%"),
+        hoverinfo = "text"
+      ) %>%
+      layout(
+        polar = list(
+          radialaxis = list(visible = TRUE, range = c(0, 100))
+        ),
+        showlegend = TRUE
+      )
+    
+   
+  })
+  
+  tpk_terpilih <- eventReactive(input$cari_tpk,{
+    tpk = input$pilih_tpk
+  })
+  
+  output$line_catin <- renderPlotly({
+    capaian_catin <- as.data.table(read_fst("data/pendampingan_catin.fst"))
+    
+    dt_melted <- capaian_catin[`No Register` == tpk_terpilih(), 
+                                .SD, 
+                                .SDcols = grep("total_orang", names(capaian_catin)[1:29], value = TRUE)]
+    dt_melted <- melt(dt_melted, 
+                      measure.vars = grep("total_orang", names(dt_melted), value = TRUE),
+                      variable.name = "bulan", 
+                      value.name = "Total")
+    
+    # Mengatur label bulan dari Januari hingga Agustus sesuai urutan yang benar
+    bulan_labels <- c("Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus")
+    
+    # Menambahkan kolom Bulan dengan urutan Januari hingga Agustus
+    dt_melted$Bulan <- factor(rep(bulan_labels, length.out = nrow(dt_melted)), levels = bulan_labels)
+    
+    # Membuat line plot menggunakan plotly
+    fig <- plot_ly(dt_melted, x = ~Bulan, y = ~Total, type = 'scatter', mode = 'lines+markers', 
+                   line = list(color = 'blue')) %>%
+      layout(title = "Tren catin Terdampingi",
+             xaxis = list(title = "Bulan"),
+             yaxis = list(title = "Total"),
+             showlegend = FALSE,
+             shapes = list(
+               # Shape untuk Januari hingga April
+               list(
+                 type = "rect",
+                 x0 = 0, x1 = 3,  # Januari hingga April
+                 y0 = min(dt_melted$Total), y1 = max(dt_melted$Total),
+                 line = list(color = "transparent"),
+                 fillcolor = "rgba(0, 0, 255, 0.2)"  # Biru transparan
+               ),
+               # Shape untuk Mei hingga Agustus
+               list(
+                 type = "rect",
+                 x0 = 3, x1 = 7,  # Mei hingga Agustus
+                 y0 = min(dt_melted$Total), y1 = max(dt_melted$Total),
+                 line = list(color = "transparent"),
+                 fillcolor = "rgba(255, 0, 0, 0.2)"  # Merah transparan
+               )
+             ),
+             annotations = list(
+               # Label untuk "Sebelum Pelatihan" di area biru
+               list(
+                 x = 1.5,  # Posisi tengah dari Januari hingga April
+                 y = max(dt_melted$Total * 0.8),  # Posisi tinggi (y) persegi panjang
+                 text = "Sebelum Pelatihan",  # Teks label
+                 showarrow = FALSE,
+                 font = list(size = 14, color = 'black'),  # Teks biru
+                 align = "center",
+                 verticalalign = "top"
+               ),
+               # Label untuk "Setelah Pelatihan" di area merah
+               list(
+                 x = 5.5,  # Posisi tengah dari Mei hingga Agustus
+                 y = max(dt_melted$Total * 0.8),  # Posisi tinggi (y) persegi panjang
+                 text = "Setelah Pelatihan",  # Teks label
+                 showarrow = FALSE,
+                 font = list(size = 14, color = 'black'),  # Teks pink
+                 align = "center",
+                 verticalalign = "top"
+               )
+             )
+      )
+    
+    # Menampilkan plot
+    fig
+    
+  })
+  
+  output$line_pascasalin <- renderPlotly({
+    capaian_pascasalin <- as.data.table(read_fst("data/pendampingan_pascasalin.fst"))
+    
+    dt_melted <- capaian_pascasalin[`No Register` == tpk_terpilih(), 
+                               .SD, 
+                               .SDcols = grep("total_orang", names(capaian_pascasalin)[1:29], value = TRUE)]
+    dt_melted <- melt(dt_melted, 
+                      measure.vars = grep("total_orang", names(dt_melted), value = TRUE),
+                      variable.name = "bulan", 
+                      value.name = "Total")
+    
+    # Mengatur label bulan dari Januari hingga Agustus sesuai urutan yang benar
+    bulan_labels <- c("Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus")
+    
+    # Menambahkan kolom Bulan dengan urutan Januari hingga Agustus
+    dt_melted$Bulan <- factor(rep(bulan_labels, length.out = nrow(dt_melted)), levels = bulan_labels)
+    
+    # Membuat line plot menggunakan plotly
+    fig <- plot_ly(dt_melted, x = ~Bulan, y = ~Total, type = 'scatter', mode = 'lines+markers', 
+                   line = list(color = 'blue')) %>%
+      layout(title = "Tren pascasalin Terdampingi",
+             xaxis = list(title = "Bulan"),
+             yaxis = list(title = "Total"),
+             showlegend = FALSE,
+             shapes = list(
+               # Shape untuk Januari hingga April
+               list(
+                 type = "rect",
+                 x0 = 0, x1 = 3,  # Januari hingga April
+                 y0 = min(dt_melted$Total), y1 = max(dt_melted$Total),
+                 line = list(color = "transparent"),
+                 fillcolor = "rgba(0, 0, 255, 0.2)"  # Biru transparan
+               ),
+               # Shape untuk Mei hingga Agustus
+               list(
+                 type = "rect",
+                 x0 = 3, x1 = 7,  # Mei hingga Agustus
+                 y0 = min(dt_melted$Total), y1 = max(dt_melted$Total),
+                 line = list(color = "transparent"),
+                 fillcolor = "rgba(255, 0, 0, 0.2)"  # Merah transparan
+               )
+             ),
+             annotations = list(
+               # Label untuk "Sebelum Pelatihan" di area biru
+               list(
+                 x = 1.5,  # Posisi tengah dari Januari hingga April
+                 y = max(dt_melted$Total * 0.8),  # Posisi tinggi (y) persegi panjang
+                 text = "Sebelum Pelatihan",  # Teks label
+                 showarrow = FALSE,
+                 font = list(size = 14, color = 'black'),  # Teks biru
+                 align = "center",
+                 verticalalign = "top"
+               ),
+               # Label untuk "Setelah Pelatihan" di area merah
+               list(
+                 x = 5.5,  # Posisi tengah dari Mei hingga Agustus
+                 y = max(dt_melted$Total * 0.8),  # Posisi tinggi (y) persegi panjang
+                 text = "Setelah Pelatihan",  # Teks label
+                 showarrow = FALSE,
+                 font = list(size = 14, color = 'black'),  # Teks pink
+                 align = "center",
+                 verticalalign = "top"
+               )
+             )
+      )
+    
+    # Menampilkan plot
+    fig
+    
+  })
+  
+  output$line_baduta <- renderPlotly({
+    capaian_baduta <- as.data.table(read_fst("data/pendampingan_baduta.fst"))
+    
+    dt_melted <- capaian_baduta[`No Register` == tpk_terpilih(), 
+                                .SD, 
+                                .SDcols = grep("total_orang", names(capaian_baduta)[1:29], value = TRUE)]
+    dt_melted <- melt(dt_melted, 
+                      measure.vars = grep("total_orang", names(dt_melted), value = TRUE),
+                      variable.name = "bulan", 
+                      value.name = "Total")
+    
+    # Mengatur label bulan dari Januari hingga Agustus sesuai urutan yang benar
+    bulan_labels <- c("Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus")
+    
+    # Menambahkan kolom Bulan dengan urutan Januari hingga Agustus
+    dt_melted$Bulan <- factor(rep(bulan_labels, length.out = nrow(dt_melted)), levels = bulan_labels)
+    
+    # Membuat line plot menggunakan plotly
+    fig <- plot_ly(dt_melted, x = ~Bulan, y = ~Total, type = 'scatter', mode = 'lines+markers', 
+                   line = list(color = 'blue')) %>%
+      layout(title = "Tren Baduta Terdampingi",
+             xaxis = list(title = "Bulan"),
+             yaxis = list(title = "Total"),
+             showlegend = FALSE,
+             shapes = list(
+               # Shape untuk Januari hingga April
+               list(
+                 type = "rect",
+                 x0 = 0, x1 = 3,  # Januari hingga April
+                 y0 = min(dt_melted$Total), y1 = max(dt_melted$Total),
+                 line = list(color = "transparent"),
+                 fillcolor = "rgba(0, 0, 255, 0.2)"  # Biru transparan
+               ),
+               # Shape untuk Mei hingga Agustus
+               list(
+                 type = "rect",
+                 x0 = 3, x1 = 7,  # Mei hingga Agustus
+                 y0 = min(dt_melted$Total), y1 = max(dt_melted$Total),
+                 line = list(color = "transparent"),
+                 fillcolor = "rgba(255, 0, 0, 0.2)"  # Merah transparan
+               )
+             ),
+             annotations = list(
+               # Label untuk "Sebelum Pelatihan" di area biru
+               list(
+                 x = 1.5,  # Posisi tengah dari Januari hingga April
+                 y = max(dt_melted$Total * 0.8),  # Posisi tinggi (y) persegi panjang
+                 text = "Sebelum Pelatihan",  # Teks label
+                 showarrow = FALSE,
+                 font = list(size = 14, color = 'black'),  # Teks biru
+                 align = "center",
+                 verticalalign = "top"
+               ),
+               # Label untuk "Setelah Pelatihan" di area merah
+               list(
+                 x = 5.5,  # Posisi tengah dari Mei hingga Agustus
+                 y = max(dt_melted$Total * 0.8),  # Posisi tinggi (y) persegi panjang
+                 text = "Setelah Pelatihan",  # Teks label
+                 showarrow = FALSE,
+                 font = list(size = 14, color = 'black'),  # Teks pink
+                 align = "center",
+                 verticalalign = "top"
+               )
+             )
+      )
+    
+    # Menampilkan plot
+    fig
+    
+  })
+  
+  output$line_bumil <- renderPlotly({
+    capaian_bumil <- as.data.table(read_fst("data/pendampingan_bumil.fst"))
+    
+    dt_melted <- capaian_bumil[`No Register` == tpk_terpilih(), 
+                                .SD, 
+                                .SDcols = grep("total_orang", names(capaian_bumil)[1:29], value = TRUE)]
+    dt_melted <- melt(dt_melted, 
+                      measure.vars = grep("total_orang", names(dt_melted), value = TRUE),
+                      variable.name = "bulan", 
+                      value.name = "Total")
+    
+    # Mengatur label bulan dari Januari hingga Agustus sesuai urutan yang benar
+    bulan_labels <- c("Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus")
+    
+    # Menambahkan kolom Bulan dengan urutan Januari hingga Agustus
+    dt_melted$Bulan <- factor(rep(bulan_labels, length.out = nrow(dt_melted)), levels = bulan_labels)
+    
+    # Membuat line plot menggunakan plotly
+    fig <- plot_ly(dt_melted, x = ~Bulan, y = ~Total, type = 'scatter', mode = 'lines+markers', 
+                   line = list(color = 'blue')) %>%
+      layout(title = "Tren Jumlah Ibu Hamil Terdampingi",
+             xaxis = list(title = "Bulan"),
+             yaxis = list(title = "Total"),
+             showlegend = FALSE,
+             shapes = list(
+               # Shape untuk Januari hingga April
+               list(
+                 type = "rect",
+                 x0 = 0, x1 = 3,  # Januari hingga April
+                 y0 = min(dt_melted$Total), y1 = max(dt_melted$Total),
+                 line = list(color = "transparent"),
+                 fillcolor = "rgba(0, 0, 255, 0.2)"  # Biru transparan
+               ),
+               # Shape untuk Mei hingga Agustus
+               list(
+                 type = "rect",
+                 x0 = 3, x1 = 7,  # Mei hingga Agustus
+                 y0 = min(dt_melted$Total), y1 = max(dt_melted$Total),
+                 line = list(color = "transparent"),
+                 fillcolor = "rgba(255, 0, 0, 0.2)"  # Merah transparan
+               )
+             ),
+             annotations = list(
+               # Label untuk "Sebelum Pelatihan" di area biru
+               list(
+                 x = 1.5,  # Posisi tengah dari Januari hingga April
+                 y = max(dt_melted$Total * 0.8),  # Posisi tinggi (y) persegi panjang
+                 text = "Sebelum Pelatihan",  # Teks label
+                 showarrow = FALSE,
+                 font = list(size = 14, color = 'black'),  # Teks biru
+                 align = "center",
+                 verticalalign = "top"
+               ),
+               # Label untuk "Setelah Pelatihan" di area merah
+               list(
+                 x = 5.5,  # Posisi tengah dari Mei hingga Agustus
+                 y = max(dt_melted$Total * 0.8),  # Posisi tinggi (y) persegi panjang
+                 text = "Setelah Pelatihan",  # Teks label
+                 showarrow = FALSE,
+                 font = list(size = 14, color = 'black'),  # Teks pink
+                 align = "center",
+                 verticalalign = "top"
+               )
+             )
+      )
+    
+    # Menampilkan plot
+    fig
+    
+  })
   #akhir tpk
   
 }
