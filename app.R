@@ -8,9 +8,11 @@ library(data.table)
 library(bslib)
 library(plotly)
 library(gt)
+library(reactablefmtr)
 
 data_wilayah <- read_fst("data/data_daftar_desa.fst")
 data_wilayah <- data.table(data_wilayah)
+data_pkb <- data.table(read_fst("data/data_pkb.fst"))
 
 
 # UI: Define the user interface
@@ -40,14 +42,17 @@ ui <- dashboardPage(
                   column(4, 
                          selectInput("pilih_kab", "Daftar Kabupaten",
                                      choices = c("SEMUA KABUPATEN", "PASANGKAYU", "MAMUJU TENGAH",
-                                                 "MAMUJU", "MAJENE", "POLEWALI MANDAR", "MAMASA")),
-                         input_task_button(
-                           label_busy = "Sedang Proses",
-                           id = "cari_rekap",
-                           label = "Cari"
-                         )),
+                                                 "MAMUJU", "MAJENE", "POLEWALI MANDAR", "MAMASA"))
+                         ),
                   column(4, selectInput("pilih_kec", "Daftar Kecamatan", choices = NULL)),
                   column(4, selectInput("pilih_desa_kel", "Pilih Desa/Kel", choices = NULL))
+                ),
+                fluidRow(
+                  input_task_button(
+                    label_busy = "Sedang Proses",
+                    id = "cari_rekap",
+                    label = "Cari"
+                  )
                 ),
                 h5(textOutput("tes_input_rekap"), style="text-align: center;"),
                 fluidRow(
@@ -88,11 +93,11 @@ ui <- dashboardPage(
               )
             ),
             bs4Card(
-              width = 12, title = "Grafik Efektifitas Pendampingan Sasaran Di Wilayah", closable = F, collapsible = TRUE,
+              width = 12, title = "Status Resiko Pendampingan Sasaran Di Wilayah", closable = F, collapsible = TRUE,
               fluidRow(
                 column(
                   6,
-                  plotlyOutput("efektif_catin"),
+                  plotlyOutput("efektif_catin")
                 ),
                 column(
                   6,
@@ -103,11 +108,41 @@ ui <- dashboardPage(
               fluidRow(
                 column(
                   6,
-                  plotlyOutput("efektif_baduta"),
+                  plotlyOutput("efektif_baduta")
                 ),
                 column(
                   6,
                   plotlyOutput("efektif_bumil")
+                )
+              ) #fluidro
+            ), #bscard
+            bs4Card(
+              width = 12, title = "Tabel Cakupan Pendampingan Sasaran Di Wilayah", closable = F, collapsible = TRUE,
+              fluidRow(
+                column(
+                  4,
+                  selectInput("pilih_sasaran", "Pilih Sasaran Pendampingan", 
+                              choices = c("Calon Pengantin", "Ibu Hamil", "Ibu Pascasalin", "Bayi Dibawah 2 Tahun"))
+                ),
+                column(
+                  4,
+                  selectInput("pilih_rentang_capaian", 
+                              "Rentang Capaian", 
+                              choices = c("Semua", "0%", "Dibawah 50%", "50% Keatas", "80% Keatas"))
+                )
+              ),
+              fluidRow(
+                input_task_button(
+                  label_busy = "Sedang Proses",
+                  id = "cari_tabel",
+                  label = "Cari"
+                )
+              ),
+              br(),
+              fluidRow(
+                column(
+                  12,
+                  uiOutput("cakupan_pendampingan")
                 )
               )
             )
@@ -548,9 +583,9 @@ server <- function(input, output, session) {
                       colors = c("#950606", "#008000"),
                       type = 'bar', 
                       textposition = 'auto',
-                      text = ~paste("Total: ", total),
+                      text = ~paste(keterangan_resiko, ": ", total),
                       hoverinfo = "text") %>%
-      layout(title = "Efektifitas Pendampingan Calon Pengantian",
+      layout(title = "Status Resiko Calon Pengantian",
              xaxis = list(title = "Kondisi Resiko"),
              yaxis = list(title = "Total"))
     
@@ -574,9 +609,9 @@ server <- function(input, output, session) {
                       colors = c("#950606", "#008000"),
                       type = 'bar', 
                       textposition = 'auto',
-                      text = ~paste("Total: ", total),
+                      text = ~paste(keterangan_resiko, ": ", total),
                       hoverinfo = "text") %>%
-      layout(title = "Efektifitas Pendampingan Ibu Pascasalin",
+      layout(title = "Status Resiko Ibu Pascasalin",
              xaxis = list(title = "Kondisi Resiko"),
              yaxis = list(title = "Total"))
     
@@ -600,9 +635,9 @@ server <- function(input, output, session) {
                       colors = c("#950606", "#008000"),
                       type = 'bar', 
                       textposition = 'auto',
-                      text = ~paste("Total: ", total),
+                      text = ~paste(keterangan_resiko, ": ", total),
                       hoverinfo = "text") %>%
-      layout(title = "Efektifitas Pendampingan Baduta",
+      layout(title = "Status Resiko Baduta",
              xaxis = list(title = "Kondisi Resiko"),
              yaxis = list(title = "Total"))
     
@@ -626,9 +661,9 @@ server <- function(input, output, session) {
                       colors = c("#950606", "#008000"),
                       type = 'bar', 
                       textposition = 'auto',
-                      text = ~paste("Total: ", total),
+                      text = ~paste(keterangan_resiko, ": ", total),
                       hoverinfo = "text") %>%
-      layout(title = "Efektifitas Pendampingan Ibu Hamil",
+      layout(title = "Status Resiko Pendampingan Ibu Hamil",
              xaxis = list(title = "Kondisi Resiko"),
              yaxis = list(title = "Total"))
     
@@ -637,6 +672,121 @@ server <- function(input, output, session) {
     
   })
   
+  nama_dataset <- eventReactive(input$cari_tabel,{
+    #choices = c("Calon Pengantin", "Ibu Hamil", "Ibu Pascasalin", "Bayi Dibawah 2 Tahun")
+    nama_dataset = input$pilih_sasaran
+    if(nama_dataset == "Calon Pengantin"){
+      data_tabel_sasaran <- data.table(read_fst("data/capaian_catin.fst"))
+    } else if(nama_dataset == "Ibu Hamil"){
+      data_tabel_sasaran <- data.table(read_fst("data/capaian_bumil.fst"))
+    } else if(nama_dataset == "Ibu Pascasalin"){
+      data_tabel_sasaran <- data.table(read_fst("data/capaian_pascasalin.fst"))
+    } else{
+      data_tabel_sasaran <- data.table(read_fst("data/capaian_baduta.fst"))
+    }
+    
+    kolom <-  c("Prov","Kab", "Kec","Desa/Kel","no_register_tpk","total_pendampingan","total_orang",
+                "Rasio Total","target_tpk","capaian")
+    
+    colnames(data_tabel_sasaran) <- kolom
+    
+    data_tabel_sasaran[, keterangan := ifelse(capaian <= 0, "Tidak", "Mendampingi")]
+    
+    #data_pkb <- data.table(read_fst("data/data_pkb.fst"))
+    data_tabel_sasaran <- data_tabel_sasaran[data_pkb, on = c("Kec" = "Kecamatan", "Desa/Kel" = "Kelurahan")]
+    #choices = c("Semua", "0%", "Dibawah 50%", "50% Keatas", "80% Keatas"))
+
+    if(input$pilih_rentang_capaian == "Semua"){
+      data_tabel_sasaran = data_tabel_sasaran
+    } else if(input$pilih_rentang_capaian == "0%"){
+      data_tabel_sasaran = data_tabel_sasaran[capaian <= 0]
+    } else if(input$pilih_rentang_capaian == "Dibawah 50%"){
+      data_tabel_sasaran = data_tabel_sasaran[capaian < 50]
+    } else if(input$pilih_rentang_capaian == "50% Keatas"){
+      data_tabel_sasaran = data_tabel_sasaran[capaian >= 50]
+    } else{
+      data_tabel_sasaran = data_tabel_sasaran[capaian >= 80]
+    }
+    data_tabel_sasaran
+    
+  })
+  
+  judul_dataset <- eventReactive(input$cari_tabel,{
+    judul_tabel <- paste("Cakupan Pendampingan ", input$pilih_sasaran)
+  })
+  
+  subjudul_dataset <- eventReactive(input$cari_tabel,{
+    paste("Capaian ", input$pilih_rentang_capaian)
+  })
+  
+  output$cakupan_pendampingan <- renderUI({
+    judul_tabel <- judul_dataset()
+    subjudul_tabel <-subjudul_dataset()
+   tabel <-  reactable(
+      nama_dataset(),
+      defaultColDef = colDef(
+        align = "left",
+        minWidth = 140,
+        headerStyle = list(background = "#7393B3", color = "black"),
+        style = list(color = "black") # Atur teks hitam untuk semua sel
+      ),
+      filterable = TRUE,
+      showPageSizeOptions = TRUE,
+      bordered = TRUE, striped = TRUE, highlight = TRUE,
+      resizable = TRUE,
+      defaultSorted = c("capaian"),
+      theme = reactableTheme(
+        borderColor = "#808080",
+        stripedColor = "#f6f8fa",
+        highlightColor = "#f0f5f9",
+        style = list(fontFamily = "-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif"),
+      ),
+      groupBy = c("Prov", "Kab", "Kec", "Desa/Kel"),
+      columns = list(
+        Prov = colDef(name = "Provinsi"),
+        Kab = colDef(name = "Kabupaten"),        
+        Kec = colDef(name = "Kecamatan"),
+        `Desa/Kel` = colDef(name = "Desa/Kelurahan"),
+        no_register_tpk = colDef(aggregate = "count", name = "No Register"),
+        total_pendampingan = colDef(aggregate = "sum", name =  "Pendampingan"),
+        total_orang = colDef(aggregate = "sum", name = "Sasaran Terdampingi"),
+        `Rasio Total` = colDef(name = "Rasio Pendampingan",
+                               # Calculate the aggregate Avg.Price as `sum(Price) / sum(Units)`
+                               aggregate = JS("function(values, rows) {
+            let totalPrice = 0
+            let totalUnits = 0
+            rows.forEach(function(row) {
+              totalPrice += row['total_pendampingan']
+              totalUnits += row['total_orang']
+            })
+            return totalPrice / totalUnits
+          }"),
+                               format = colFormat(locales = "fr-FR", digits = 2)
+        ),
+        target_tpk = colDef(aggregate = "sum", name = "Target", 
+                            format =  colFormat(separators = TRUE, locales = "id-ID")),
+        capaian = colDef(name = "Capaian",
+                         # Calculate the aggregate Avg.Price as `sum(Price) / sum(Units)`
+                         aggregate = JS("function(values, rows) {
+            let totalPrice = 0
+            let totalUnits = 0
+            rows.forEach(function(row) {
+              totalPrice += row['total_orang']
+              totalUnits += row['target_tpk']
+            })
+            return totalPrice / totalUnits * 100
+          }"),
+                         format = colFormat(locales = "id-ID", digits = 2)
+        ),
+        keterangan = colDef(aggregate = "frequency", name = "Keterangan")
+      )
+    )
+   
+   tabel %>%
+     add_title(judul_tabel, align = "left") %>%
+     add_subtitle(subjudul_tabel)
+    
+  })
   #akhir rekap wilayah
   
   
