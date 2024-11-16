@@ -5,6 +5,10 @@ library(data.table)
 library(fst)
 
 data_catin_melapor <- gsheet::gsheet2tbl("https://docs.google.com/spreadsheets/d/1ytoFze2zjF5l_plWwDRe_ZeAELrqtEVEDqjrt408vHc/edit?gid=1849424246#gid=1849424246")
+data_catin_melapor$no_register_tpk <- format(data_catin_melapor$no_register_tpk, scientific = F)
+data_catin_melapor <- data_catin_melapor %>%
+  mutate(`Rasio Total` = round(total_pendampingan / total_orang, 2),
+         capaian = round(total_orang / target_tpk * 100, 2))
 write.fst(data_catin_melapor, "data/capaian_catin.fst")
 
 data_catin_melapor <- data.table(read_fst("data/capaian_catin.fst"))
@@ -44,14 +48,20 @@ gt(gt_catin) %>%
 
 ##pasca
 capaian_pasca <- gsheet::gsheet2tbl("https://docs.google.com/spreadsheets/d/1YAD01NYkOG_jjrWA-GQ_13na10rdiUop30ceettN6sY/edit?gid=1685367814#gid=1685367814")
-
+capaian_pasca$no_register_tpk <- format(capaian_pasca$no_register_tpk, scientific = F)
+capaian_pasca <- capaian_pasca %>%
+  mutate(rasio_total = round(total_pendampingan / total_orang, 2),
+         capaian = round(total_orang / target_tpk * 100, 2))
 capaian_pasca <- as.data.table(capaian_pasca)
 capaian_pasca$no_register_tpk <- format(capaian_pasca$no_register_tpk, scientific = F)
 write.fst(capaian_pasca, "data/capaian_pascasalin.fst")
 
 ##BADUTA
 capaian_baduta <- gsheet::gsheet2tbl("https://docs.google.com/spreadsheets/d/1-MChjqWwio75Qe7KMi46nLvxL8u87TXBNoxeABuu6E0/edit?gid=1685367814#gid=1685367814")
-
+capaian_baduta$no_register_tpk <- format(capaian_baduta$no_register_tpk, scientific = F)
+capaian_baduta <- capaian_baduta %>%
+  mutate(`Rasio Total` = round(total_pendampingan / total_baduta, 2),
+         capaian_baduta = round(total_baduta / target_tpk * 100, 2))
 capaian_baduta <- as.data.table(capaian_baduta)
 capaian_baduta$no_register_tpk <- format(capaian_baduta$no_register_tpk, scientific = F)
 write.fst(capaian_baduta, "data/capaian_baduta.fst")
@@ -59,6 +69,9 @@ write.fst(capaian_baduta, "data/capaian_baduta.fst")
 
 ##bumil
 capaian_bumil <- gsheet::gsheet2tbl("https://docs.google.com/spreadsheets/d/12jGov8gxvlD6_D0ySGkdgiUriOQ2AEYGqIcGprJnra0/edit?gid=1685367814#gid=1685367814")
+capaian_bumil <- capaian_bumil %>%
+  mutate(`Rasio Total` = round(total_pendampingan_bumil / total_bumil, 2),
+         capaian_bumil = round(total_bumil / target_tpk_bumil * 100, 2))
 
 capaian_bumil <- as.data.table(capaian_bumil)
 capaian_bumil$no_register_tpk <- format(capaian_bumil$no_register_tpk, scientific = F)
