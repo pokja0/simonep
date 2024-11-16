@@ -14,6 +14,7 @@ library(waiter)
 data_wilayah <- read_fst("data/data_daftar_desa.fst")
 data_wilayah <- data.table(data_wilayah)
 data_pkb <- data.table(read_fst("data/data_pkb.fst"))
+data_tpk <- data.table(fread("data/daftar_tpk.csv"))
 
 
 # UI: Define the user interface
@@ -22,8 +23,8 @@ ui <- dashboardPage(
   header = dashboardHeader(title = "SIMONEP"),  # Header with title
   sidebar = dashboardSidebar(   # Sidebar with navigation
     sidebarMenu(
-      menuItem("Home", tabName = "home", icon = icon("home")),
-      menuItem("Data Analysis", tabName = "data_analysis", icon = icon("chart-bar")),
+      menuItem("Monitoring TPK", tabName = "home", icon = icon("home")),
+      menuItem("TPK", tabName = "tpk", icon = icon("chart-bar")),
       menuItem("Settings", tabName = "settings", icon = icon("cogs"))
     )
   ),
@@ -56,6 +57,7 @@ ui <- dashboardPage(
                     label = "Cari"
                   )
                 ),
+                br(),
                 h5(textOutput("tes_input_rekap"), style="text-align: center;"),
                 fluidRow(
                   infoBox(
@@ -149,10 +151,30 @@ ui <- dashboardPage(
               )
             )
       ),
-      tabItem(tabName = "data_analysis",
+      tabItem(tabName = "tpk",
+              bs4Card(
+                width = 12, title = "Pilih Wilayah", closable = F, collapsible = TRUE,
+                fluidRow(
+                  column(3, 
+                         selectInput("pilih_kab_tpk", "Daftar Kabupaten",
+                                     choices = c("PASANGKAYU", "MAMUJU TENGAH",
+                                                 "MAMUJU", "MAJENE", "POLEWALI MANDAR", "MAMASA"))
+                  ),
+                  column(3, selectInput("pilih_kec_tpk", "Daftar Kecamatan", choices = NULL)),
+                  column(3, selectInput("pilih_desa_kel_tpk", "Pilih Desa/Kel", choices = NULL)),
+                  column(3, selectInput("pilih_tpk", "Pilih Register TPK", choices = NULL))
+                ),
+                fluidRow(
+                  input_task_button(
+                    label_busy = "Sedang Proses",
+                    id = "cari_tpk",
+                    label = "Cari"
+                  )
+                )
+              ),
               fluidRow(
                 box(title = "Data Plot", status = "primary", solidHeader = TRUE, width = 6,
-                    plotOutput("data_plot")),
+                    gt_output("tabel_tpk")),
                 box(title = "Data Table", status = "warning", solidHeader = TRUE, width = 6,
                     DT::dataTableOutput("data_table"))
               )
@@ -333,7 +355,7 @@ server <- function(input, output, session) {
   
   output$tes_input_rekap <- renderText({
     if(values$default == 0){
-      teks = "Klik Cari Untuk Menampilkan Halaman"
+      teks = ""
     }
     else{
       teks = teks_judul_rekap()
@@ -791,6 +813,52 @@ server <- function(input, output, session) {
   })
   #akhir rekap wilayah
   
+  #tpk
+  
+  #input tpk
+  observe({
+      pilihan_kec = data_wilayah[, .(KABUPATEN, KECAMATAN)]
+      pilihan_kec = data_wilayah[KABUPATEN == input$pilih_kab_tpk, .(KABUPATEN, KECAMATAN)]
+      pilihan_kec = c(pilihan_kec$KECAMATAN)
+    
+    updateSelectInput(session, "pilih_kec_tpk",
+                      choices = pilihan_kec,
+                      selected = pilihan_kec[1])
+    
+  })
+  
+  observe({
+      pilihan_desa = data_wilayah[, .(KECAMATAN, KELURAHAN)]
+      pilihan_desa = data_wilayah[KECAMATAN == input$pilih_kec_tpk, .(KELURAHAN, KECAMATAN)]
+      pilihan_desa = c(pilihan_desa$KELURAHAN)
+    
+    updateSelectInput(session, "pilih_desa_kel_tpk",
+                      choices = pilihan_desa,
+                      selected = pilihan_desa[1])
+    
+  })
+  
+  observe({
+    pilihan_tpk = data_tpk[, .(Kec, `Desa/Kel`, `No Register`)]
+    pilihan_tpk = data_tpk[Kec == input$pilih_kec_tpk & `Desa/Kel` == input$pilih_desa_kel_tpk, .(Kec, `Desa/Kel`, `No Register`)]
+    pilihan_tpk = c(pilihan_tpk$`No Register`)
+    updateSelectInput(session, "pilih_tpk",
+                      choices = pilihan_tpk,
+                      selected = pilihan_tpk[1])
+    
+  })
+  #akhir input tpk
+  
+  data_tpk_cari <- eventReactive(input$cari_tpk, {
+    data_tpk = data_tpk[`No Register` == input$pilih_tpk]
+  })
+  
+  output$tabel_tpk <- render_gt({
+    data_tpk = data_tpk_cari()
+    gt(data_tpk)
+  })
+  
+  #akhir tpk
   
 }
 
