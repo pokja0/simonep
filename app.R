@@ -25,7 +25,7 @@ ui <- dashboardPage(
     sidebarMenu(
       menuItem("Monitoring TPK", tabName = "home", icon = icon("home")),
       menuItem("TPK", tabName = "tpk", icon = icon("chart-bar")),
-      menuItem("Settings", tabName = "settings", icon = icon("cogs"))
+      menuItem("Bidan Terlatih", tabName = "bidan", icon = icon("cogs"))
     )
   ),
   body = dashboardBody(  # Main content area
@@ -33,9 +33,8 @@ ui <- dashboardPage(
       tabItem(tabName = "home",
               jumbotron(
                 title = "SIMONEP",
-                status = "info",
-                lead = "Sistem Informasi Monitoring Lalala",
-                btnName = "Download Panduan",
+                status = "info",btnName = NULL,
+                lead = "Sistem Informasi Monitoring dan Evaluasi Program",
                 href = NULL
                 
               ),
@@ -200,10 +199,10 @@ ui <- dashboardPage(
                 )
               )
       ),
-      tabItem(tabName = "settings",
+      tabItem(tabName = "bidan",
               fluidRow(
-                box(title = "Settings", status = "success", solidHeader = TRUE, width = 12,
-                    "Adjust the settings for your analysis.")
+                box(title = "Pelatihan Bidan", status = "success", solidHeader = TRUE, width = 12,
+                    "On Progress")
               )
       )
     )
