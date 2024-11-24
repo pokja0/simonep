@@ -32,9 +32,9 @@ ui <- dashboardPage(
   sidebar = dashboardSidebar(   # Sidebar with navigation
     sidebarMenu(
       menuItem("Monitoring TPK", tabName = "home", icon = icon("home")),
-      menuItem("TPK", tabName = "tpk", icon = icon("chart-bar")),
-      menuItem("Bidan Terlatih", tabName = "bidan", icon = icon("cogs")),
-      menuItem("PPKS", tabName = "ppks", icon = icon("cogs"))
+      menuItem("TPK", tabName = "tpk", icon = icon("people-group")),
+      menuItem("Bidan Terlatih", tabName = "bidan", icon = icon("user-nurse")),
+      menuItem("PPKS", tabName = "ppks", icon = icon("house-medical-circle-check"))
     )
   ),
   body = dashboardBody(  # Main content area
@@ -222,7 +222,7 @@ ui <- dashboardPage(
                              fluidRow(
                                column(
                                  4,
-                                 selectInput("tahun_ppks", "Pilih Tahun", 
+                                 selectInput("tahun_ppks_umum", "Pilih Tahun", 
                                              choices = c("2023", "2024"))
                                ),
                                column(
@@ -252,7 +252,65 @@ ui <- dashboardPage(
                                )
                              )
                            ),
-                  tabPanel("Pelayanan PPKS", verbatimTextOutput("summary"))
+                  tabPanel("Pelayanan PPKS", 
+                           fluidRow(
+                             column(4, 
+                                    selectInput("pilih_kab_ppks", "Daftar Kabupaten",
+                                                choices = c("PASANGKAYU", "MAMUJU TENGAH",
+                                                            "MAMUJU", "MAJENE", "POLEWALI MANDAR", "MAMASA"))
+                             ),
+                             column(4, 
+                                    selectInput("pilih_kec_ppks", "Daftar Kecamatan", choices = NULL)),
+                             column(
+                               4,
+                               selectInput("pilih_tahun_ppks", "Pilih Tahun", 
+                                           choices = c("2023", "2024"))
+                             ),
+                             
+                           ),
+                           fluidRow(
+                             input_task_button(
+                               label_busy = "Sedang Proses",
+                               id = "cari_ppks",
+                               label = "Cari"
+                             )
+                           ),
+                           br(),
+                           fluidRow(
+                             infoBox(
+                               title = "Jumlah Klien",
+                               width = 4,
+                               value = textOutput("jumlah_klien_ppks"),
+                               icon = icon("clock"),
+                               color = "primary"
+                             ),
+                             infoBox(
+                               title = "Jumlah Konsultasi Lanjutan/Rujukan",
+                               width = 4,
+                               value = textOutput("jumlah_rujukan_ppks"),
+                               icon = icon("clock"),
+                               color = "primary"
+                             ),
+                             infoBox(
+                               title = "Pelayanan Selesai",
+                               width = 4,
+                               value = textOutput("jumlah_selesai_ppks"),
+                               icon = icon("clock"),
+                               color = "primary"
+                             )
+                           ),
+                           br(),
+                           fluidRow(
+                             column(
+                               6,
+                               plotlyOutput("klien_ppks_bulanan")
+                             ),
+                             column(
+                               6,
+                               plotlyOutput("bar_jenis_pelayanan_ppks")
+                             )
+                           )
+                          )
                 )
               )
       )
@@ -1315,13 +1373,13 @@ server <- function(input, output, session) {
 #     label = "Cari"
 #   )
   tidak_memiliki_ppks  <- eventReactive(input$cari_ppks_umum, {
-    if(input$tahun_ppks == "2024"){
+    if(input$tahun_ppks_umum == "2024"){
       BULAN1 = "OKTOBER"
     } else{
       BULAN1 = "DESEMBER"
     }
     tidak_memiliki_ppks <- pelayanan_ppks |>
-      fsubset(TAHUN == input$tahun_ppks) |>
+      fsubset(TAHUN == input$tahun_ppks_umum) |>
       fsubset(BULAN == BULAN1) |>
       fsubset(`YANG ADA` == "0") |>
       select(KABUPATEN, KECAMATAN)
@@ -1329,7 +1387,7 @@ server <- function(input, output, session) {
   })
   
   subtitle_ppks <- eventReactive(input$cari_ppks_umum, {
-    if(input$tahun_ppks == "2024"){
+    if(input$tahun_ppks_umum == "2024"){
       subtitle = paste0("OKTOBER - ", "2024")
     } else{
       subtitle = paste0("DESEMBER - ", "2023")
@@ -1366,14 +1424,14 @@ server <- function(input, output, session) {
   )
   
   tidak_melapor_ppks <- eventReactive(input$cari_ppks_umum,{
-    if(input$tahun_ppks == "2024"){
+    if(input$tahun_ppks_umum == "2024"){
       jumlah_bulan <- 10 - as.integer(input$bulan_tidak_lapor_ppks)
     } else{
       jumlah_bulan <- 10 - as.integer(input$bulan_tidak_lapor_ppks)
     }
 
     tidak_melapor_ppks <- pelayanan_ppks %>%
-      fsubset(TAHUN == input$tahun_ppks) |>
+      fsubset(TAHUN == input$tahun_ppks_umum) |>
       fgroup_by(KABUPATEN, KECAMATAN) %>%
       fsummarise(`YANG LAPOR` = sum(`YANG LAPOR`)) |>
       fsubset(`YANG LAPOR` <= jumlah_bulan)
@@ -1381,13 +1439,13 @@ server <- function(input, output, session) {
   })
   
   subtitle_tidak_lapor_ppks <- eventReactive(input$cari_ppks_umum, {
-    if(input$tahun_ppks == "2024"){
+    if(input$tahun_ppks_umum == "2024"){
       subtitle = paste0("OKTOBER - ", "2024")
     } else{
       subtitle = paste0("DESEMBER - ", "2023")
     }
     subtitle <- paste0("Selama ", input$bulan_tidak_lapor_ppks,
-                      " Bulan Pada Tahun ", input$tahun_ppks)
+                      " Bulan Pada Tahun ", input$tahun_ppks_umum)
   })
   
   output$tabel_tidak_melapor_ppks <- renderUI({
@@ -1424,6 +1482,154 @@ server <- function(input, output, session) {
       fwrite(tidak_melapor_ppks(), file)
     }
   )
+  
+  observe({
+    pilihan_kec = data_wilayah[, .(KABUPATEN, KECAMATAN)]
+    pilihan_kec = data_wilayah[KABUPATEN == input$pilih_kab_ppks, .(KABUPATEN, KECAMATAN)]
+    pilihan_kec = c(pilihan_kec$KECAMATAN)
+    
+    
+    updateSelectInput(session, "pilih_kec_ppks",
+                      choices = pilihan_kec,
+                      selected = pilihan_kec[1])
+  })
+  
+  jumlah_klien_ppks <- eventReactive(input$cari_ppks,{
+    klien_ppks <- pelayanan_ppks |>
+      fsubset(KECAMATAN == input$pilih_kec_ppks) |>
+      fsubset(TAHUN == input$pilih_tahun_ppks) |>
+      fgroup_by(KABUPATEN, KECAMATAN, TAHUN) |>
+      fsummarise(total = sum(`JUMLAH KLIEN YANG MENDAPAT PELAYANAN KONSULTASI DAN KONSELING PADA PPKS`))
+    
+    klien_ppks <- klien_ppks$total
+    klien_ppks
+  })
+  
+  output$jumlah_klien_ppks <- renderText({
+    jumlah_klien_ppks()
+  })
+  
+  jumlah_rujukan_ppks <- eventReactive(input$cari_ppks,{
+    rujukan_ppks <- pelayanan_ppks |>
+      fsubset(KECAMATAN == input$pilih_kec_ppks) |>
+      fsubset(TAHUN == input$pilih_tahun_ppks) |>
+      fgroup_by(KABUPATEN, KECAMATAN, TAHUN) |>
+      fsummarise(total = sum(`KONSULTASI LANJUTAN`) + sum(DIRUJUK))
+    
+    rujukan_ppks <- rujukan_ppks$total
+    rujukan_ppks
+  })
+  
+  output$jumlah_rujukan_ppks <- renderText({
+    jumlah_rujukan_ppks()
+  })
+  
+  jumlah_selesai_ppks <- eventReactive(input$cari_ppks,{
+    selesai_ppks <- pelayanan_ppks |>
+      fsubset(KECAMATAN == input$pilih_kec_ppks) |>
+      fsubset(TAHUN == input$pilih_tahun_ppks) |>
+      fgroup_by(KABUPATEN, KECAMATAN, TAHUN) |>
+      fsummarise(total = sum(SELESAI))
+    
+    selesai_ppks <- selesai_ppks$total
+    selesai_ppks
+  })
+  
+  output$jumlah_selesai_ppks <- renderText({
+    jumlah_selesai_ppks()
+  })
+  
+  data_klien_ppks_bulanan <- eventReactive(input$cari_ppks,{
+    klien_ppks <- pelayanan_ppks |>
+      fsubset(KECAMATAN == input$pilih_kec_ppks) |>
+      fsubset(TAHUN == input$pilih_tahun_ppks) |>
+      fgroup_by(KABUPATEN, KECAMATAN,BULAN, TAHUN) |>
+      fsummarise(TOTAL = sum(`JUMLAH KLIEN YANG MENDAPAT PELAYANAN KONSULTASI DAN KONSELING PADA PPKS`))
+    
+    klien_ppks$BULAN <- factor(klien_ppks$BULAN, levels = c("JANUARI", "FEBRUARI", "MARET", "APRIL",
+                                                            "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER",
+                                                            "OKTOBER", "NOVEMBER", "DESEMBER"))
+    
+    klien_ppks <- klien_ppks[order(klien_ppks$BULAN), ]
+    klien_ppks
+  })
+  
+  output$klien_ppks_bulanan <- renderPlotly({
+    # Buat grafik menggunakan plotly
+    plot_ly(
+      data_klien_ppks_bulanan(),
+      x = ~BULAN,
+      y = ~TOTAL,
+      type = 'scatter',
+      mode = 'lines+markers+text',
+      text = ~TOTAL,               # Menambahkan label nilai
+      textposition = 'top center', # Posisi label
+      line = list(color = 'blue'), # Warna garis
+      marker = list(color = 'red') # Warna titik
+    )%>%
+      layout(
+        title = "Jumlah Klien PPKS",
+        xaxis = list(title = "Bulan"),
+        yaxis = list(
+          title = "Total",
+          range = c(0, max(data_klien_ppks_bulanan()$TOTAL)+(ceiling(max(data_klien_ppks_bulanan()$TOTAL)*0.1))),  # Memastikan sumbu Y dimulai dari 0
+          #tickvals = 0:max(data_klien_ppks_bulanan()$TOTAL), # Nilai unik pada sumbu Y
+          dtick = ceiling(max(data_jenis_layanan()$Jumlah) / 4),
+          tickformat = 'd'             # Pastikan bilangan bulat tanpa desimal
+        ),
+        margin = list(t = 50, b = 50),
+        font = list(size = 12)
+      )
+    
+  })
+  
+  data_jenis_layanan <- eventReactive(input$cari_ppks,{
+    jenis_pelayanan_ppks <- pelayanan_ppks |>
+      fsubset(KECAMATAN == input$pilih_kec_ppks) |>
+      fsubset(TAHUN == input$pilih_tahun_ppks) |>
+      fgroup_by(KABUPATEN, KECAMATAN, TAHUN) |>
+      fsummarise(`Data & Informasi` = sum(`DATA DAN INFORMASI BANGGA KENCANA`),
+                 `Balita & Anak` = sum(`KELUARGA BALITA DAN ANAK`),
+                 Remaja = sum(`KELUARGA REMAJA DAN REMAJA`),
+                 Lansia = sum(`KELUARGA LANSIA DAN LANSIA`),
+                 `Pra Nikah` = sum(`PRA NIKAH`),
+                 `KB & Kespro` = sum(`KB DAN KESEHATAN REPRODUKSI`),
+                 `Keluarga Harmonis` = sum(`KELUARGA HARMONIS`),
+                 Lainnya = sum(LAINNYA)) |>
+      pivot(values = 4:11, names = list("Pelayanan", "Jumlah"), factor = F,
+      ) |>
+      roworderv("Jumlah",decreasing = T)
+    jenis_pelayanan_ppks
+  })
+  
+  output$bar_jenis_pelayanan_ppks <- renderPlotly({
+    # Buat grafik menggunakan plotly
+    plot_ly(
+      data_jenis_layanan(),
+      y = ~Pelayanan,
+      x = ~Jumlah,
+      type = 'bar',
+      orientation = 'h',
+      text = ~Jumlah,
+      textposition = 'auto',
+      textangle = 0, 
+      marker = list(color = 'rgba(55, 128, 191, 0.7)',
+                    line = list(color = 'rgba(55, 128, 191, 1.0)', width = 1))
+    ) %>%
+      layout(
+        title = "Pelayanan Berdasarkan Jenis",
+        xaxis = list(title = "Jumlah", dtick = ceiling(max(data_jenis_layanan()$Jumlah) / 4)),
+        yaxis = list(
+          title = "Kategori Pelayanan",
+          categoryorder = "total ascending"  # Urutkan kategori berdasarkan total Jumlah
+        ),
+        bargap = 0.2
+      )
+    
+  })
+  
+  
+  
   
   ### akhir ppks
 }
