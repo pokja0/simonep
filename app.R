@@ -10,11 +10,19 @@ library(plotly)
 library(gt)
 library(reactablefmtr)
 library(waiter)
+library(collapse)
 
 data_wilayah <- read_fst("data/data_daftar_desa.fst")
 data_wilayah <- data.table(data_wilayah)
 data_pkb <- data.table(read_fst("data/data_pkb.fst"))
 data_tpk <- data.table(fread("data/daftar_tpk.csv"))
+
+csvDownloadButton <- function(id, filename = "data.csv", label = "Download as CSV") {
+  tags$button(
+    tagList(icon("download"), label),
+    onclick = sprintf("Reactable.downloadDataCSV('%s', '%s')", id, filename)
+  )
+}
 
 
 # UI: Define the user interface
@@ -25,7 +33,8 @@ ui <- dashboardPage(
     sidebarMenu(
       menuItem("Monitoring TPK", tabName = "home", icon = icon("home")),
       menuItem("TPK", tabName = "tpk", icon = icon("chart-bar")),
-      menuItem("Bidan Terlatih", tabName = "bidan", icon = icon("cogs"))
+      menuItem("Bidan Terlatih", tabName = "bidan", icon = icon("cogs")),
+      menuItem("PPKS", tabName = "ppks", icon = icon("cogs"))
     )
   ),
   body = dashboardBody(  # Main content area
@@ -203,6 +212,48 @@ ui <- dashboardPage(
               fluidRow(
                 box(title = "Pelatihan Bidan", status = "success", solidHeader = TRUE, width = 12,
                     "On Progress")
+              )
+      ),
+      tabItem(tabName = "ppks",
+              box(width = 12,
+                tabsetPanel(type = "pills",
+                  tabPanel("Gambaran Umum", 
+                           br(),
+                             fluidRow(
+                               column(
+                                 4,
+                                 selectInput("tahun_ppks", "Pilih Tahun", 
+                                             choices = c("2023", "2024"))
+                               ),
+                               column(
+                                 4,
+                                 selectInput("bulan_tidak_lapor_ppks", 
+                                             "Rentang Bulan Tidak Lapor", 
+                                             choices = c(1:10), selected = 6)
+                               )
+                             ),
+                             fluidRow(
+                               input_task_button(
+                                 label_busy = "Sedang Proses",
+                                 id = "cari_ppks_umum",
+                                 label = "Cari"
+                               )
+                             ),
+                             br(),
+                             fluidRow(
+                               box(title = "Kecamatan Tidak Memiliki PPKS",
+                                 uiOutput("tabel_tidak_memiliki_ppks"),
+                                 br(),
+                                 uiOutput("download_data_ppks_tidak")
+                               ),
+                               box(title = "Kecamatan Tidak Melapor PPKS",
+                                 uiOutput("tabel_tidak_melapor_ppks"),
+                                 uiOutput("download_data_ppks_tidak_lapor")
+                               )
+                             )
+                           ),
+                  tabPanel("Pelayanan PPKS", verbatimTextOutput("summary"))
+                )
               )
       )
     )
@@ -1239,6 +1290,142 @@ server <- function(input, output, session) {
   })
   #akhir tpk
   
+  ### bidan
+  
+  ### akhir bidan
+  
+  ### ppks
+  pelayanan_ppks <- fread("data/pelayanan_ppks.csv")
+  pelayanan_ppks$`YANG ADA` <- factor(pelayanan_ppks$`YANG ADA`) 
+  pelayanan_ppks$TAHUN <- factor(pelayanan_ppks$TAHUN) 
+#   selectInput("tahun_ppks", "Pilih Tahun", 
+#               choices = c("2023", "2024"))
+#   ),
+# column(
+#   4,
+#   selectInput("bulan_tidak_lapor_ppks", 
+#               "Rentang Bulan Tidak Lapor", 
+#               choices = c(1:12))
+# )
+# ),
+# fluidRow(
+#   input_task_button(
+#     label_busy = "Sedang Proses",
+#     id = "cari_ppks_umum",
+#     label = "Cari"
+#   )
+  tidak_memiliki_ppks  <- eventReactive(input$cari_ppks_umum, {
+    if(input$tahun_ppks == "2024"){
+      BULAN1 = "OKTOBER"
+    } else{
+      BULAN1 = "DESEMBER"
+    }
+    tidak_memiliki_ppks <- pelayanan_ppks |>
+      fsubset(TAHUN == input$tahun_ppks) |>
+      fsubset(BULAN == BULAN1) |>
+      fsubset(`YANG ADA` == "0") |>
+      select(KABUPATEN, KECAMATAN)
+    tidak_memiliki_ppks
+  })
+  
+  subtitle_ppks <- eventReactive(input$cari_ppks_umum, {
+    if(input$tahun_ppks == "2024"){
+      subtitle = paste0("OKTOBER - ", "2024")
+    } else{
+      subtitle = paste0("DESEMBER - ", "2023")
+    }
+    subtitle
+  })
+  
+  output$tabel_tidak_memiliki_ppks <- renderUI({
+    
+    tabel <- reactable(
+      tidak_memiliki_ppks(),
+      groupBy = "KABUPATEN",
+      columns = list(
+        KECAMATAN = colDef(aggregate = "count")
+      )
+    )
+    tabel %>%
+    #  add_title("KECAMATAN YANG TIDAK MEMILIKI PPKS", align = "left",font_size = 26) %>%
+      add_subtitle(subtitle_ppks(), font_size = 16)
+  })
+  
+  output$download_data_ppks_tidak <- renderUI({
+    req(input$cari_ppks_umum)
+    downloadButton("downloadData", "Download")
+  })
+  
+  output$downloadData <- downloadHandler(
+    filename = function() {
+      paste("kec-tidak-memiliki-ppks-", subtitle_ppks(), ".csv", sep="")
+    },
+    content = function(file) {
+      fwrite(tidak_memiliki_ppks(), file)
+    }
+  )
+  
+  tidak_melapor_ppks <- eventReactive(input$cari_ppks_umum,{
+    if(input$tahun_ppks == "2024"){
+      jumlah_bulan <- 10 - as.integer(input$bulan_tidak_lapor_ppks)
+    } else{
+      jumlah_bulan <- 10 - as.integer(input$bulan_tidak_lapor_ppks)
+    }
+
+    tidak_melapor_ppks <- pelayanan_ppks %>%
+      fsubset(TAHUN == input$tahun_ppks) |>
+      fgroup_by(KABUPATEN, KECAMATAN) %>%
+      fsummarise(`YANG LAPOR` = sum(`YANG LAPOR`)) |>
+      fsubset(`YANG LAPOR` <= jumlah_bulan)
+    tidak_melapor_ppks
+  })
+  
+  subtitle_tidak_lapor_ppks <- eventReactive(input$cari_ppks_umum, {
+    if(input$tahun_ppks == "2024"){
+      subtitle = paste0("OKTOBER - ", "2024")
+    } else{
+      subtitle = paste0("DESEMBER - ", "2023")
+    }
+    subtitle <- paste0("Selama ", input$bulan_tidak_lapor_ppks,
+                      " Bulan Pada Tahun ", input$tahun_ppks)
+  })
+  
+  output$tabel_tidak_melapor_ppks <- renderUI({
+    tabel <- reactable(
+      tidak_melapor_ppks(),
+      groupBy = "KABUPATEN",
+      theme = reactableTheme(
+        borderColor = "#dfe2e5",
+        stripedColor = "#f6f8fa",
+        highlightColor = "#f0f5f9",
+        cellPadding = "8px 12px",
+        style = list(fontFamily = "-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif"),
+        searchInputStyle = list(width = "100%")
+      ),
+      columns = list(
+        KECAMATAN = colDef(aggregate = "count")
+      )
+    )
+    tabel %>%
+     # add_title("KECAMATAN YANG TIDAK MELAPOR PPKS", align = "left",font_size = 26) %>%
+      add_subtitle(subtitle_tidak_lapor_ppks(),font_size = 16)
+  })
+  
+  output$download_data_ppks_tidak_lapor <- renderUI({
+    req(input$cari_ppks_umum)
+    downloadButton("downloadData_tidak_lapor", "Download")
+  })
+  
+  output$downloadData_tidak_lapor <- downloadHandler(
+    filename = function() {
+      paste("kec-tidak-lapor-ppks-", subtitle_tidak_lapor_ppks(), ".csv", sep="")
+    },
+    content = function(file) {
+      fwrite(tidak_melapor_ppks(), file)
+    }
+  )
+  
+  ### akhir ppks
 }
 
 # Run the app
