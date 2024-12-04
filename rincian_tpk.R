@@ -1,4 +1,6 @@
 library(tidyr)
+library(data.table)
+library(tidyverse)
 data_tpk <- data.table(fread("data/daftar_tpk.csv"))
 data_tpk <- data_tpk %>%
   select(Kab, Kec, `Desa/Kel`, `No Register`)
@@ -13,9 +15,11 @@ pendampingan_bumil <- dplyr::left_join(data_tpk, pendampingan_bumil,
                                               "No Register" = "no_register_tpk")) 
 pendampingan_bumil$prov <- "SULAWESI BARAT"
 pendampingan_bumil <- pendampingan_bumil %>%
-  mutate(across(everything(), ~ replace_na(., 0)))
+  mutate(across(everything(), ~ replace_na(., 0))) %>%
+  mutate(`Keterangan Bumil` = ifelse(total_pendampingan <= 0, "TIDAK MENDAMPINGI", "MENDAMPINGI")) %>% #tambahan
+  select(prov, Kab, Kec, `Desa/Kel`, `No Register`, `Keterangan Bumil`) # tambahan
 
-write.fst(pendampingan_bumil, "data/pendampingan_bumil.fst")
+#write.fst(pendampingan_bumil, "data/pendampingan_bumil.fst")
 
 ### catin
 pendampingan_catin <- gsheet::gsheet2tbl("https://docs.google.com/spreadsheets/d/1ytoFze2zjF5l_plWwDRe_ZeAELrqtEVEDqjrt408vHc/edit?gid=1855711036#gid=1855711036")
@@ -26,7 +30,9 @@ pendampingan_catin <- dplyr::left_join(data_tpk, pendampingan_catin,
                                               "No Register" = "no_register_tpk")) 
 pendampingan_catin$prov <- "SULAWESI BARAT"
 pendampingan_catin <- pendampingan_catin %>%
-  mutate(across(everything(), ~ replace_na(., 0)))
+  mutate(across(everything(), ~ replace_na(., 0))) %>%
+  mutate(`Keterangan Catin` = ifelse(total_pendampingan <= 0, "TIDAK MENDAMPINGI", "MENDAMPINGI")) %>% #tambahan
+  select(prov, Kab, Kec, `Desa/Kel`, `No Register`, `Keterangan Catin`) # tambahan
 
 write.fst(pendampingan_catin, "data/pendampingan_catin.fst")
 
@@ -39,7 +45,9 @@ pendampingan_pascasalin <- dplyr::left_join(data_tpk, pendampingan_pascasalin,
                                               "No Register" = "no_register_tpk")) 
 pendampingan_pascasalin$prov <- "SULAWESI BARAT"
 pendampingan_pascasalin <- pendampingan_pascasalin %>%
-  mutate(across(everything(), ~ replace_na(., 0)))
+  mutate(across(everything(), ~ replace_na(., 0))) %>%
+  mutate(`Keterangan Pascasalin` = ifelse(total_pendampingan <= 0, "TIDAK MENDAMPINGI", "MENDAMPINGI")) %>% #tambahan
+  select(prov, Kab, Kec, `Desa/Kel`, `No Register`, `Keterangan Pascasalin`) # tambahan
 
 write.fst(pendampingan_pascasalin, "data/pendampingan_pascasalin.fst")
 
@@ -52,10 +60,29 @@ pendampingan_baduta <- dplyr::left_join(data_tpk, pendampingan_baduta,
                                                    "No Register" = "no_register_tpk")) 
 pendampingan_baduta$prov <- "SULAWESI BARAT"
 pendampingan_baduta <- pendampingan_baduta %>%
-  mutate(across(everything(), ~ replace_na(., 0)))
+  mutate(across(everything(), ~ replace_na(., 0))) %>%
+  mutate(`Keterangan Baduta` = ifelse(total_pendampingan <= 0, "TIDAK MENDAMPINGI", "MENDAMPINGI")) %>% #tambahan
+  select(prov, Kab, Kec, `Desa/Kel`, `No Register`, `Keterangan Baduta`) # tambahan
+
+  
 
 write.fst(pendampingan_baduta, "data/pendampingan_baduta.fst")
 
+### TPK MENDAMPINGI
+data_pkb <- fst::read.fst("data/data_pkb.fst")
+
+data_tpk_MENDAMPINGI <- pendampingan_baduta %>%
+  inner_join(pendampingan_bumil, by = c("prov", "Kab", "Kec", "Desa/Kel", "No Register")) %>%
+  inner_join(pendampingan_catin, by = c("prov", "Kab", "Kec", "Desa/Kel", "No Register")) %>%
+  inner_join(pendampingan_pascasalin, by = c("prov", "Kab", "Kec", "Desa/Kel", "No Register")) %>%
+  mutate(`Keterangan Akhir` = ifelse(
+    rowSums(select(., starts_with("Keterangan")) == "MENDAMPINGI") > 0,
+    "AKTIF",
+    "TIDAK AKTIF"
+  )) %>%
+  inner_join(data_pkb, by = c("Kec" = "Kecamatan", "Desa/Kel" = "Kelurahan"))
+  
+openxlsx::write.xlsx(data_tpk_MENDAMPINGI, "data_tpk_MENDAMPINGI.xlsx")
 ####
 # Sintaks berantai
 

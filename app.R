@@ -11,11 +11,19 @@ library(gt)
 library(reactablefmtr)
 library(waiter)
 library(collapse)
+library(dplyr)
+library(tidyr)
 
 data_wilayah <- read_fst("data/data_daftar_desa.fst")
 data_wilayah <- data.table(data_wilayah)
 data_pkb <- data.table(read_fst("data/data_pkb.fst"))
 data_tpk <- data.table(fread("data/daftar_tpk.csv"))
+
+data_bidan <- fread("data/daftar_bidan_terlatih.csv")
+data_capaian <- fread("data/pelayanan_faskes_jejaring.csv")
+data_capaian$BULAN <- factor(data_capaian$BULAN, levels = unique(data_capaian$BULAN))
+data_capaian$TAHUN <- factor(data_capaian$TAHUN, levels = unique(data_capaian$TAHUN))
+data_capaian$KODE <- as.character(data_capaian$KODE)
 
 csvDownloadButton <- function(id, filename = "data.csv", label = "Download as CSV") {
   tags$button(
@@ -209,9 +217,42 @@ ui <- dashboardPage(
               )
       ),
       tabItem(tabName = "bidan",
-              fluidRow(
-                box(title = "Pelatihan Bidan", status = "success", solidHeader = TRUE, width = 12,
-                    "On Progress")
+              bs4Card(
+                width = 12, title = "", closable = F, collapsible = TRUE,
+                fluidRow(
+                  column(4, selectInput("pilih_tahun_bidan", "Pilih Tahun", choices = c("2024", "2023"))),
+                  column(4, 
+                         selectInput("pilih_kab_bidan", "Daftar Kabupaten",
+                                     choices = c("PASANGKAYU", "MAMUJU TENGAH",
+                                                 "MAMUJU", "MAJENE", "POLEWALI MANDAR", "MAMASA"))
+                  ),
+                  column(4, selectInput("pilih_kec_bidan", "Pilih Kecamatan", choices = NULL))
+                ),
+                fluidRow(
+                  column(4, selectInput("pilih_faskes_bidan", "Pilih Faskes/Jejaring", choices = NULL)),
+                  column(4, selectInput("pilih_nama_bidan", "Pilih Bidan", choices = NULL))
+                ),
+                fluidRow(
+                  column(
+                    4,
+                    input_task_button(
+                      label_busy = "Sedang Proses",
+                      id = "cari_rekap_bidan",
+                      label = "Cari"
+                    )
+                  )
+                ), #row
+                br(),
+                fluidRow(
+                  column(
+                    6,
+                    plotlyOutput("line_bidan")
+                  ),
+                  column(
+                    6,
+                    plotlyOutput("bar_bidan")
+                  )
+                )
               )
       ),
       tabItem(tabName = "ppks",
@@ -1349,6 +1390,121 @@ server <- function(input, output, session) {
   #akhir tpk
   
   ### bidan
+  observe({
+    
+    pilihan_kec <- data_bidan |>
+      fsubset(TAHUN == input$pilih_tahun_bidan) |>
+      fsubset(KABUPATEN == input$pilih_kab_bidan) |>
+      select(KECAMATAN)
+    
+    
+    updateSelectInput(session, "pilih_kec_bidan",
+                      choices = pilihan_kec$KECAMATAN,
+                      selected = pilihan_kec$KECAMATAN[1])
+  })
+  
+  observe({
+    
+    pilihan_faskes <- data_bidan |>
+      fsubset(TAHUN == input$pilih_tahun_bidan) |>
+      fsubset(KABUPATEN == input$pilih_kab_bidan) |>
+      fsubset(KECAMATAN == input$pilih_kec_bidan) |>
+      select(`NAMA FASKES/JEJARING`)
+    
+    
+    updateSelectInput(session, "pilih_faskes_bidan",
+                      choices = pilihan_faskes$`NAMA FASKES/JEJARING`,
+                      selected = pilihan_faskes$`NAMA FASKES/JEJARING`[1])
+  })
+  
+  observe({
+    
+    pilihan_bidan <- data_bidan |>
+      fsubset(TAHUN == input$pilih_tahun_bidan) |>
+      fsubset(`NAMA FASKES/JEJARING` == input$pilih_faskes_bidan) |>
+      select(`NAMA BIDAN`)
+    
+    
+    updateSelectInput(session, "pilih_nama_bidan",
+                      choices = pilihan_bidan$`NAMA BIDAN`,
+                      selected = pilihan_bidan$`NAMA BIDAN`[1])
+  })
+  
+  nama_bidan <- eventReactive(input$cari_rekap_bidan,{
+    input$pilih_nama_bidan
+  })
+  
+  tahun_bidan <- eventReactive(input$cari_rekap_bidan,{
+    input$pilih_tahun_bidan
+  })
+  
+  data_line <- eventReactive(input$cari_rekap_bidan,{
+    filter_kode <- data_bidan %>%
+      fsubset(`NAMA BIDAN` == input$pilih_nama_bidan) |>
+      fsubset(TAHUN == input$pilih_tahun_bidan) 
+    filter_kode <- filter_kode$KODE
+    
+    data_line <- data_capaian %>%
+      fsubset(KODE == filter_kode) |>
+      fsubset(TAHUN == input$pilih_tahun_bidan) |>
+      (\(dt) dt[, MKJP := as.integer(`1 BATANG`) + as.integer(`2 BATANG`) + as.integer(IUD)])()
+  })
+  
+  output$bar_bidan <- renderPlotly({
+    warna <- c("MKJP" = "orange", "NON MKJP" = "#90e0ef")
+    data_line = data_line()
+    data_bar <- data_line %>%
+      dplyr::group_by(`NAMA FASKES`) %>%
+      dplyr::summarise(MKJP = sum(MKJP),
+                `NON MKJP` = sum(`JUMLAH PESERTA KB BARU`) - sum(MKJP)) %>%
+      pivot_longer(
+        cols = c("MKJP", "NON MKJP"),
+        names_to = "JENIS",
+        values_to = "JUMLAH"
+      )
+    # Membuat grafik batang dengan plotly
+    fig <- plot_ly(data_bar, x = ~JENIS, y = ~JUMLAH, type = 'bar', 
+                   color = ~JENIS, colors = warna,
+                   textfont = list(size = 15, color = 'black'),
+                   text = ~paste("Jumlah: ", JUMLAH), hoverinfo = 'text') %>%
+      layout(title = paste("Jumlah Pelayanan KB Berdasarkan Jenis \n", nama_bidan(), 
+                           "\n Tahun", tahun_bidan()),
+             xaxis = list(title = "Jenis"),
+             yaxis = list(title = "Jumlah", range = c(0, max(data_bar$JUMLAH) + 10)))
+    
+    # Menampilkan grafik
+    fig
+    
+  })
+  
+  output$line_bidan <- renderPlotly({
+    data_line <- data_line()
+    # Membuat grafik garis dengan dua garis dan legenda
+    fig <- plot_ly(data_line) %>%
+      add_trace(x = ~BULAN, y = ~MKJP, type = 'scatter', mode = 'lines+markers+text',
+                hovertemplate = paste("BULAN: %{x}<br>MKJP: %{y}<br>PB: ", data_line$`JUMLAH PESERTA KB BARU`, "<extra></extra>"),
+                text = ~MKJP, textposition = 'top center', line = list(shape = "linear"),
+                textfont = list(size = 16), marker = list(size = 12), name = 'MKJP') %>%
+      add_trace(x = ~BULAN, y = ~`JUMLAH PESERTA KB BARU`, type = 'scatter', mode = 'lines+markers+text',
+                hovertemplate = paste("BULAN: %{x}<br>MKJP: ", data_line$MKJP, "<br>PB: %{y}<extra></extra>"),
+                text = ~`JUMLAH PESERTA KB BARU`, textposition = 'top center', line = list(shape = "linear"),
+                textfont = list(size = 16), marker = list(size = 12), name = 'Peserta Baru') %>%
+      layout(title = paste("Tren Capaian Peserta KB Baru \n", nama_bidan(), 
+                           "\n Tahun", tahun_bidan()),
+             legend = list(orientation = "h",  # Mengatur legend horizontal
+                           x = 0.5,  # Posisi tengah (horizontal)
+                           y = -0.2,  # Letakkan di bawah plot
+                           xanchor = "center",  # Anchorkan tengah
+                           yanchor = "top"),
+             xaxis = list(showline = TRUE, linewidth = 2, linecolor = 'black'),
+             yaxis = list(showline = TRUE, linewidth = 2, linecolor = 'black',
+               title = "Jumlah", range = c(0, max(data_line$`JUMLAH PESERTA KB BARU`) + 3)))
+    
+    # Menampilkan grafik
+    fig
+    
+  })
+  
   
   ### akhir bidan
   

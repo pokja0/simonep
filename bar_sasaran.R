@@ -19,10 +19,30 @@ efektifitas_baduta_dplyr <- efektifitas_baduta %>%
   )
 
 efektifitas_baduta_dplyr <- as.data.table(efektifitas_baduta_dplyr)
-efektifitas_baduta_dplyr$keterangan_waktu <- factor(efektifitas_baduta_dplyr$keterangan_waktu, 
+efektifitas_baduta_dplyr$keterangan_waktu <- factor(efektifitas_baduta_dplyr$keterangan_waktu,
                                                     levels = c("KUNJUNGAN AWAL", "KUNJUNGAN AKHIR"))
 
-write_fst(efektifitas_baduta_dplyr, "data/efektifitas_baduta.fst")  
+
+efektifitas_baduta_airminum <- efektifitas_baduta %>%
+  select(prov, kota, kecamatan, kelurahan, no_register_tpk,ket_status_akses_airminum_awal, ket_status_akses_airminum_akhir) %>%
+  gather("keterangan_waktu", "keterangan_resiko_airminum", 6:7) %>%
+  group_by(prov, kota, kecamatan, kelurahan, no_register_tpk,keterangan_waktu, keterangan_resiko_airminum) %>%
+  summarise(total = n()) %>%
+  mutate(
+    keterangan_waktu = ifelse(keterangan_waktu == "keterangan_akhir", "KUNJUNGAN AKHIR", "KUNJUNGAN AWAL")
+  )
+
+efektifitas_baduta_airminum <- as.data.table(efektifitas_baduta_airminum)
+efektifitas_baduta_airminum$keterangan_waktu <- factor(efektifitas_baduta_airminum$keterangan_waktu,
+                                                    levels = c("KUNJUNGAN AWAL", "KUNJUNGAN AKHIR"))
+
+View(
+  efektifitas_baduta_airminum %>%
+    right_join(efektifitas_baduta_dplyr, by=c("prov", "kota", "kecamatan", 
+                                              "kelurahan", "no_register_tpk", "keterangan_waktu"))
+)
+
+# write_fst(efektifitas_baduta_dplyr, "data/efektifitas_baduta.fst")  
 
 efektifitas_baduta_dplyr <- as.data.table(read_fst("data/efektifitas_baduta.fst"))
 grafik_baduta <- efektifitas_baduta_dplyr[kota == "POLEWALI MANDAR" & 
